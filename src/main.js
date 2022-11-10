@@ -33,6 +33,14 @@ function ForceGraph(
   const N = d3.map(nodes, nodeId).map(intern);
   const LS = d3.map(links, linkSource).map(intern);
   const LT = d3.map(links, linkTarget).map(intern);
+  // scaling the degree of each node
+  let degree = d3.map(nodes, nodeRadius);
+  const scale = (num, in_min, in_max, out_min, out_max) => {
+    return ((num - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min;
+  };
+
+  degree = degree.map((num) => scale(num, 0, 260, 5, 40));
+
   if (nodeTitle === undefined) nodeTitle = (_, i) => N[i];
   const T = nodeTitle == null ? null : d3.map(nodes, nodeTitle);
   const G = nodeGroup == null ? null : d3.map(nodes, nodeGroup).map(intern);
@@ -43,8 +51,15 @@ function ForceGraph(
   const L = typeof linkStroke !== "function" ? null : d3.map(links, linkStroke);
 
   // Replace the input nodes and links with mutable objects for the simulation.
-  nodes = d3.map(nodes, (_, i) => ({ id: N[i] }));
-  links = d3.map(links, (_, i) => ({ source: LS[i], target: LT[i] }));
+  nodes = d3.map(nodes, (_, i) => ({
+    id: N[i],
+    degree: degree[i],
+    force: degree.map((num) => scale(num, 0, 600000, 0, 100)),
+  }));
+  links = d3.map(links, (_, i) => ({
+    source: LS[i],
+    target: LT[i],
+  }));
 
   // Compute default domains.
   if (G && nodeGroups === undefined) nodeGroups = d3.sort(G);
@@ -55,12 +70,16 @@ function ForceGraph(
   // Construct the forces.
   const forceNode = d3.forceManyBody();
   const forceLink = d3.forceLink(links).id(({ index: i }) => N[i]);
+
   if (nodeStrength !== undefined) forceNode.strength(nodeStrength);
   if (linkStrength !== undefined) forceLink.strength(linkStrength);
 
   const simulation = d3
     .forceSimulation(nodes)
-    .force("link", forceLink)
+    .force(
+      "link",
+      forceLink.distance(() => 150) //100)
+    )
     .force("charge", forceNode)
     .force("center", d3.forceCenter())
     .on("tick", ticked);
@@ -94,7 +113,7 @@ function ForceGraph(
     .selectAll("circle")
     .data(nodes)
     .join("circle")
-    .attr("r", nodeRadius)
+    .attr("r", (d) => d.degree)
     .call(drag(simulation));
 
   if (W) link.attr("stroke-width", ({ index: i }) => W[i]);
@@ -147,7 +166,8 @@ function ForceGraph(
   return Object.assign(svg.node(), { scales: { color } });
 }
 
-fetch("../data/miserables.json")
+// fetch("../data/miserables.json")
+fetch("../data/flow_graph_early_tiny.json")
   .then((Response) => Response.json())
   .then((miserables) => {
     console.log(miserables);
@@ -155,9 +175,11 @@ fetch("../data/miserables.json")
       nodeId: (d) => d.id,
       nodeGroup: (d) => d.group,
       nodeTitle: (d) => `${d.id}\n${d.group}`,
+      nodeRadius: (d) => d.degree,
       linkStrokeWidth: (l) => Math.sqrt(l.value),
-      width: 1000,
-      height: 800,
+      nodeStrokeOpacity: 0.6,
+      width: 1400, //1000,
+      height: 1800, //800,
       // invalidation, // a promise to stop the simulation when the cell is re-run
     });
 
